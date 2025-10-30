@@ -1,0 +1,22 @@
+# Web框架
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# 任务队列
+celery==5.3.4
+redis==5.0.1
+flower==2.0.1
+
+# 音频处理和语音识别
+openai-whisper==20231117
+torch==2.1.1
+torchaudio==2.1.1
+
+# HTTP请求
+requests==2.31.0
+httpx==0.25.2
+
+# 其他工具
+python-multipart==0.0.6
+python-dotenv==1.0.0
