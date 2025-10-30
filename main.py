@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl, validator
 from typing import Optional, Literal
 import redis
@@ -7,11 +9,21 @@ import json
 import uuid
 from datetime import datetime
 from celery_tasks import process_video_task
+import os
 
 app = FastAPI(
     title="视频转文字API",
     description="基于 yt-dlp + FFmpeg + Whisper 的视频转文字服务",
     version="1.0.0"
+)
+
+# 添加CORS支持
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Redis连接
@@ -53,12 +65,16 @@ class TaskStatusResponse(BaseModel):
 
 @app.get("/")
 async def root():
-    """API根路径"""
+    """返回Web前端页面"""
+    if os.path.exists("static/index.html"):
+        return FileResponse("static/index.html")
     return {
         "service": "视频转文字API",
         "version": "1.0.0",
         "status": "running",
+        "message": "Web界面文件未找到，请访问 /docs 查看API文档",
         "endpoints": {
+            "api_docs": "/docs",
             "submit_task": "POST /api/tasks",
             "get_task": "GET /api/tasks/{task_id}",
             "health": "GET /health"
@@ -176,4 +192,6 @@ async def delete_task(task_id: str):
 
 if __name__ == "__main__":
     import uvicorn
+    # 确保static目录存在
+    os.makedirs("static", exist_ok=True)
     uvicorn.run(app, host="0.0.0.0", port=8000)
