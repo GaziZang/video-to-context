@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # Redis - 消息代理和结果后端
+  redis:
+    image: redis:7-alpine
+    container_name: video_to_text_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # FastAPI Web应用
+  web:
+    build: .
+    container_name: video_to_text_web
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - temp_files:/tmp/video_to_text
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Celery Worker - 异步任务处理
+  celery_worker:
+    build: .
+    container_name: video_to_text_worker
+    command: celery -A celery_tasks worker --loglevel=info --concurrency=2
+    volumes:
+      - .:/app
+      - temp_files:/tmp/video_to_text
+      - whisper_models:/root/.cache/whisper
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - C_FORCE_ROOT=true
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Celery Flower - 任务监控界面 (可选)
+  flower:
+    build: .
+    container_name: video_to_text_flower
+    command: celery -A celery_tasks flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+      - celery_worker
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+  temp_files:
+    driver: local
+  whisper_models:
+    driver: local
+
+networks:
+  default:
+    name: video_to_text_network
